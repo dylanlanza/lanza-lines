@@ -1,0 +1,720 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lanza Lines</title>
+<meta name="description" content="A pixel-art pipe puzzle by Lanza Games. Link each pair of colored dots and fill the whole board.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 7' shape-rendering='crispEdges'%3E%3Crect x='0' y='0' width='2' height='7' fill='%23e2512a'/%3E%3Crect x='0' y='5' width='5' height='2' fill='%23e2512a'/%3E%3Crect x='5' y='2' width='1' height='3' fill='%23f2c14e'/%3E%3Crect x='4' y='4' width='1' height='1' fill='%23f2c14e'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jersey+10&family=Pixelify+Sans:wght@400;500;600&family=Silkscreen&display=swap">
+<style>
+/* Layout: a puzzle bench. Meters and a toolbar (undo, restart, hint, level picker) over a framed pixel grid, with stats and how-to-play beside it on wide screens and below it on phones. */
+:root{
+  --ink:#0e1322;      /* page */
+  --hull:#151d34;     /* sunken panels */
+  --deck:#1e2946;     /* raised panels */
+  --deck-hi:#2b3a63;  /* highlights, disabled fills */
+  --edge:#060912;     /* pixel outlines */
+  --foam:#ece6d2;     /* text */
+  --mist:#95a2c4;     /* muted text */
+  --buoy:#ff6a3d; --buoy-hi:#ff9a72; --buoy-lo:#b8432a;
+  --kelp:#62cf94; --kelp-hi:#9be8bd; --kelp-lo:#2f8a5a;
+  --brass:#f2c14e;
+  --f-display:"Jersey 10", "Silkscreen", ui-monospace, Menlo, monospace;
+  --f-body:"Pixelify Sans", ui-monospace, "SF Mono", Menlo, monospace;
+  --f-label:"Silkscreen", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+html,body{background:var(--ink);color:var(--foam)}
+body{
+  font-family:var(--f-body);font-size:15px;line-height:1.45;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));
+  padding-right:max(16px, env(safe-area-inset-right, 0px));
+  padding-block:18px 40px;
+  background-image:radial-gradient(var(--hull) 1px, transparent 1.5px);
+  background-size:8px 8px;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+h1,h2,h3,p,dl,dd{margin:0}
+img.px, canvas{image-rendering:pixelated;image-rendering:crisp-edges}
+.frame{box-shadow:-3px 0 0 0 var(--edge),3px 0 0 0 var(--edge),0 -3px 0 0 var(--edge),0 3px 0 0 var(--edge)}
+:focus-visible{outline:2px dashed var(--brass);outline-offset:5px}
+.wrap{max-width:1040px;margin:0 auto}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+
+/* ---------- header ---------- */
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:14px 24px;margin-bottom:18px}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.brand img{width:44px;height:auto}
+.brand h1{font-family:var(--f-display);font-weight:400;font-size:clamp(34px,9vw,44px);line-height:.9;letter-spacing:.01em;color:var(--foam);text-shadow:3px 3px 0 var(--edge)}
+.meters{display:flex;flex-wrap:wrap;gap:8px 26px;margin-left:auto}
+.meter{display:grid;gap:2px}
+.meter span{font-family:var(--f-label);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--mist)}
+.meter b{font-family:var(--f-display);font-weight:400;font-size:28px;line-height:1;font-variant-numeric:tabular-nums}
+.meter b small{font-size:18px;color:var(--mist)}
+.meter.score b{color:var(--brass)}
+
+/* ---------- toolbar ---------- */
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:14px 16px;margin-bottom:20px}
+.btn{font-family:var(--f-label);font-size:12px;letter-spacing:.06em;text-transform:uppercase;line-height:1.1;color:var(--edge);background:var(--kelp);border:0;padding:10px 14px;cursor:pointer;white-space:nowrap;
+  box-shadow:-3px 0 0 0 var(--edge),3px 0 0 0 var(--edge),0 -3px 0 0 var(--edge),0 3px 0 0 var(--edge),inset 0 -3px 0 0 var(--kelp-lo),inset 0 3px 0 0 var(--kelp-hi)}
+.btn:hover:not(:disabled){filter:brightness(1.07)}
+.btn:active:not(:disabled){transform:translateY(2px)}
+.btn:disabled{background:var(--deck-hi);color:var(--mist);cursor:not-allowed;box-shadow:-3px 0 0 0 var(--edge),3px 0 0 0 var(--edge),0 -3px 0 0 var(--edge),0 3px 0 0 var(--edge),inset 0 -3px 0 0 var(--hull)}
+.btn.alt{background:var(--deck);color:var(--foam);box-shadow:-3px 0 0 0 var(--edge),3px 0 0 0 var(--edge),0 -3px 0 0 var(--edge),0 3px 0 0 var(--edge),inset 0 -3px 0 0 var(--hull),inset 0 3px 0 0 var(--deck-hi)}
+.btn.alt:disabled{background:var(--deck-hi);color:var(--mist)}
+.btn.gold{background:var(--brass);animation:throb .5s steps(2) infinite;box-shadow:-3px 0 0 0 var(--edge),3px 0 0 0 var(--edge),0 -3px 0 0 var(--edge),0 3px 0 0 var(--edge),inset 0 -3px 0 0 #b9820f,inset 0 3px 0 0 #ffe28a}
+@keyframes throb{50%{transform:translateY(-2px)}}
+.lvl{display:flex;align-items:stretch;background:var(--edge);box-shadow:-3px 0 0 0 var(--edge),3px 0 0 0 var(--edge),0 -3px 0 0 var(--edge),0 3px 0 0 var(--edge)}
+.lvl button{border:0;padding:0 12px;cursor:pointer;background:var(--deck);color:var(--foam);display:grid;place-items:center}
+.lvl button:hover:not(:disabled){background:var(--deck-hi)}
+.lvl button:disabled{background:var(--hull);color:var(--deck-hi);cursor:not-allowed}
+.lvl button.warn{background:var(--buoy);color:var(--edge)}
+.lvl span{font-family:var(--f-label);font-size:11px;letter-spacing:.06em;text-transform:uppercase;background:var(--hull);color:var(--foam);padding:10px 12px;margin-inline:3px;white-space:nowrap;min-width:13ch;text-align:center}
+.tri{display:block;width:0;height:0;border-top:6px solid transparent;border-bottom:6px solid transparent}
+.tri.l{border-right:8px solid currentColor}
+.tri.r{border-left:8px solid currentColor}
+.ghost{font-family:var(--f-label);font-size:10px;letter-spacing:.08em;text-transform:uppercase;background:none;border:0;color:var(--mist);cursor:pointer;padding:6px 4px}
+.ghost:hover{color:var(--foam)}
+.bar .ghost{margin-left:auto}
+
+/* ---------- board ---------- */
+.stage{display:grid;grid-template-columns:auto minmax(0,1fr);gap:28px;align-items:start}
+.boardwrap{position:relative;width:max-content;max-width:100%}
+#board{display:block;background:#0a0f1d;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;cursor:pointer;
+  box-shadow:-3px 0 0 0 var(--edge),3px 0 0 0 var(--edge),0 -3px 0 0 var(--edge),0 3px 0 0 var(--edge),8px 8px 0 0 rgba(6,9,18,.5)}
+#board:focus-visible{outline:2px dashed var(--brass);outline-offset:7px}
+
+/* ---------- win ---------- */
+.winbox{position:absolute;left:50%;top:clamp(24px,18%,140px);transform:translateX(-50%);z-index:50;width:min(92%,360px);background:var(--deck);padding:18px 20px 20px;text-align:center;display:grid;gap:12px;justify-items:center;
+  box-shadow:-3px 0 0 0 var(--edge),3px 0 0 0 var(--edge),0 -3px 0 0 var(--edge),0 3px 0 0 var(--edge),inset 0 4px 0 0 var(--brass),8px 8px 0 0 rgba(6,9,18,.5);animation:pop .4s steps(6)}
+@keyframes pop{from{opacity:0;translate:0 10px}to{opacity:1;translate:0 0}}
+.winbox small{font-family:var(--f-label);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--mist)}
+.winbox h2{font-family:var(--f-display);font-weight:400;font-size:56px;line-height:.85;color:var(--brass);text-shadow:3px 3px 0 var(--edge)}
+.winbox dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 18px;width:100%;padding:12px 0 4px;border-top:3px solid var(--hull)}
+.winbox dt{font-family:var(--f-label);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--mist)}
+.winbox dd{font-family:var(--f-display);font-size:26px;line-height:1;font-variant-numeric:tabular-nums}
+.winbox p{font-size:14px;color:var(--mist)}
+.winbox p b{color:var(--brass);font-weight:500}
+#confetti{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:6000}
+
+/* ---------- side ---------- */
+.side{display:grid;gap:18px;align-content:start;min-width:0}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:12px}
+.stats div{background:var(--hull);padding:9px 11px 8px;box-shadow:-3px 0 0 0 var(--edge),3px 0 0 0 var(--edge),0 -3px 0 0 var(--edge),0 3px 0 0 var(--edge)}
+.stats dt{font-family:var(--f-label);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--mist)}
+.stats dd{margin:2px 0 0;font-family:var(--f-display);font-size:24px;line-height:1;font-variant-numeric:tabular-nums}
+.label{font-family:var(--f-label);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--mist)}
+.help{color:var(--mist);font-size:14px;max-width:75ch;display:grid;gap:10px}
+.help b{color:var(--foam);font-weight:500}
+kbd{font-family:var(--f-label);font-size:10px;background:var(--deck);color:var(--foam);padding:2px 5px 1px;box-shadow:0 2px 0 0 var(--edge)}
+
+.toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom, 0px));transform:translateX(-50%);z-index:7000;background:var(--deck);color:var(--foam);padding:12px 16px;max-width:min(92vw,520px);font-size:15px;
+  box-shadow:-3px 0 0 0 var(--edge),3px 0 0 0 var(--edge),0 -3px 0 0 var(--edge),0 3px 0 0 var(--edge),inset 0 3px 0 0 var(--brass)}
+
+@media (max-width:760px){
+  .stage{grid-template-columns:minmax(0,1fr);gap:22px}
+  .boardwrap{margin-inline:auto}
+}
+@media (max-width:560px){
+  .meters{margin-left:0;width:100%;justify-content:space-between}
+  .bar .ghost{margin-left:0}
+  .btn{padding:9px 11px;font-size:11px}
+}
+@media (prefers-reduced-motion: reduce){
+  .winbox, .btn.gold{animation:none}
+}
+body{margin:0}
+</style>
+</head>
+<body>
+<header class="wrap top">
+  <div class="brand">
+    <img class="px" id="logo" alt="">
+    <h1>Lanza Lines</h1>
+  </div>
+  <div class="meters">
+    <div class="meter score"><span>Level</span><b id="mLevel">1</b></div>
+    <div class="meter"><span>Linked</span><b id="mFlows">0/0</b></div>
+    <div class="meter"><span>Filled</span><b id="mFill">0%</b></div>
+    <div class="meter"><span>Moves</span><b id="mMoves">0</b></div>
+    <div class="meter"><span>Time</span><b id="mTime">0:00</b></div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="bar">
+    <button class="btn alt" id="undo" type="button">Undo</button>
+    <button class="btn alt" id="restart" type="button">Restart</button>
+    <button class="btn" id="hint" type="button">Hint</button>
+    <div class="lvl" role="group" aria-label="Choose a level">
+      <button type="button" id="prev" aria-label="Previous level"><i class="tri l"></i></button>
+      <span id="lvlLabel">Level 1 · 5×5</span>
+      <button type="button" id="next" aria-label="Next level"><i class="tri r"></i></button>
+    </div>
+    <button class="ghost" id="mute" type="button">Sound: on</button>
+  </div>
+
+  <div class="stage" id="stage">
+    <div class="boardwrap">
+      <canvas id="board" tabindex="0" role="application" aria-roledescription="puzzle grid" aria-describedby="howto"></canvas>
+      <div class="winbox" id="win" role="dialog" aria-labelledby="winH" hidden>
+        <small id="winLevel"></small>
+        <h2 id="winH">Solved!</h2>
+        <dl>
+          <div><dt>Time</dt><dd id="wTime">-</dd></div>
+          <div><dt>Moves</dt><dd id="wMoves">-</dd></div>
+          <div><dt>Hints</dt><dd id="wHints">-</dd></div>
+          <div><dt>Next board</dt><dd id="wNext">-</dd></div>
+        </dl>
+        <p id="wNote"></p>
+        <button class="btn gold" id="again" type="button">Next level</button>
+      </div>
+    </div>
+
+    <aside class="side">
+      <dl class="stats">
+        <div><dt>Solved</dt><dd id="stSolved">0</dd></div>
+        <div><dt>Perfect</dt><dd id="stPerfect">0</dd></div>
+        <div><dt>Top level</dt><dd id="stTop">1</dd></div>
+        <div><dt>Hints used</dt><dd id="stHints">0</dd></div>
+        <div><dt id="stBestLabel">Best 5×5</dt><dd id="stBest">-</dd></div>
+      </dl>
+      <div class="help" id="howto">
+        <p><b>Drag from a dot</b> to lay a pipe to the other dot of the same color. Pipes can't cross, and every square has to be filled before the level counts.</p>
+        <p>Drag over another pipe to cut it. Drag back along your own pipe to shorten it, or tap a dot to clear its pipe. Solve a level using <b>one move per color</b> and no hints for a perfect.</p>
+        <p>Keys: arrows move around the board, <kbd>Enter</kbd> picks up or drops a pipe, <kbd>Z</kbd> undo, <kbd>R</kbd> restart, <kbd>H</kbd> hint, <kbd>N</kbd> next level.</p>
+      </div>
+    </aside>
+  </div>
+</main>
+<canvas id="confetti" class="px" hidden aria-hidden="true"></canvas>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<div class="sr" id="say" aria-live="polite"></div>
+
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const top = a => a[a.length - 1];
+function mulberry(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+function mix(a, b, t){
+  const rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)), A = rgb(a), B = rgb(b);
+  return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * t).toString(16).padStart(2, '0')).join('');
+}
+
+/* ================= COLORS ================= */
+// in order of how easy they are to tell apart, so small boards get the clearest ones
+const COLORS = [
+  ['Red', '#e8453c'], ['Blue', '#3f7cf2'], ['Green', '#3fbf5f'], ['Yellow', '#f2cf3d'], ['Orange', '#ff8a2b'], ['Cyan', '#3fd7e6'],
+  ['Pink', '#f06bc8'], ['Purple', '#9a63f0'], ['Maroon', '#a33a4f'], ['White', '#ece6d2'], ['Lime', '#a8e04a'], ['Brown', '#b07440'],
+  ['Teal', '#2a9d8f'], ['Gray', '#8b93a8'], ['Peach', '#ffb38a'], ['Indigo', '#5e4bd1'],
+].map(([name, hex]) => ({name, hex, hi:mix(hex, '#ffffff', .45), lo:mix(hex, '#000000', .32)}));
+
+/* ================= PIXEL SPRITES ================= */
+function sprite(rows, pal, outline = '#0b0f1c'){
+  const h = rows.length, w = Math.max(...rows.map(r => r.length));
+  const c = document.createElement('canvas'); c.width = w + 2; c.height = h + 2;
+  const x = c.getContext('2d');
+  const at = (i, j) => (j < 0 || j >= h || i < 0) ? '.' : (rows[j][i] ?? '.');
+  if (outline){
+    x.fillStyle = outline;
+    for (let j = -1; j <= h; j++) for (let i = -1; i <= w; i++){
+      if (at(i, j) !== '.') continue;
+      if (at(i-1,j) !== '.' || at(i+1,j) !== '.' || at(i,j-1) !== '.' || at(i,j+1) !== '.') x.fillRect(i+1, j+1, 1, 1);
+    }
+  }
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++){
+    const ch = at(i, j); if (ch === '.') continue;
+    x.fillStyle = pal[ch] || '#ff00ff';
+    x.fillRect(i+1, j+1, 1, 1);
+  }
+  return c;
+}
+const DOT = ["..hhhh..",".hllhhh.","hllhhhhh","hlhhhhhh","hhhhhhhd","hhhhhhhd",".hhhhdd.","..dddd.."];
+const DOTSPR = COLORS.map(c => sprite(DOT, {h:c.hex, l:c.hi, d:c.lo}));
+// logo: two dots joined by a pipe, bent into the studio's L
+const LOGO = ["aaaa......","ahaa......","aaaa......","aaaa......",".pp.......",".pp...bbbb",".pppppbhbb",".pppppbbbb","......bbbb"];
+$('#logo').src = sprite(LOGO, {a:'#e2512a', h:'#ff9a72', p:'#e2512a', b:'#f2c14e'}).toDataURL();
+
+/* ================= SOUND ================= */
+let ac = null;
+function tone(f, d, when = 0, type = 'square', vol = 0.04){
+  if (P.muted) return;
+  try {
+    ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+    const t0 = ac.currentTime + when, o = ac.createOscillator(), g = ac.createGain();
+    o.type = type; o.frequency.setValueAtTime(f, t0);
+    g.gain.setValueAtTime(vol, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + d);
+    o.connect(g).connect(ac.destination); o.start(t0); o.stop(t0 + d + 0.02);
+  } catch {}
+}
+const note = c => 262 * Math.pow(2, [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24, 26, 28, 31, 33, 36][c % 16] / 12);
+let lastNope = 0;
+const sfx = {
+  pick(c){ tone(note(c), .04, 0, 'square', .025); },
+  step(len){ tone(320 + Math.min(len, 30) * 9, .025, 0, 'triangle', .04); },
+  cut(){ tone(180, .05, 0, 'square', .03); tone(120, .06, .04, 'square', .025); },
+  link(c){ tone(note(c), .07, 0, 'square', .035); tone(note(c) * 1.5, .1, .07, 'square', .035); },
+  undo(){ tone(440, .04, 0, 'triangle', .05); tone(330, .05, .04, 'triangle', .05); },
+  hint(){ [660, 880, 990].forEach((f, i) => tone(f, .06, i * .05, 'triangle', .05)); },
+  clear(){ for (let i = 0; i < 4; i++) tone(500 - i * 60, .03, i * .03, 'square', .02); },
+  nope(){ const now = performance.now(); if (now - lastNope < 250) return; lastNope = now; tone(150, .1, 0, 'triangle', .07); },
+  win(){ [523, 659, 784, 1046, 784, 1046, 1318].forEach((f, i) => tone(f, .12, i * .09, 'square', .035)); },
+};
+
+/* ================= LEVELS ================= */
+// [first level, board size]: the board grows a step every few levels and tops out at 12×12
+const SIZES = [[1, 5], [4, 6], [8, 7], [13, 8], [19, 9], [26, 10], [34, 11], [44, 12]];
+const sizeFor = L => SIZES.reduce((n, [from, s]) => L >= from ? s : n, 5);
+const nbrs = (i, n) => { const x = i % n, y = (i - x) / n, r = []; if (x > 0) r.push(i - 1); if (x < n - 1) r.push(i + 1); if (y > 0) r.push(i - n); if (y < n - 1) r.push(i + n); return r; };
+const adjacent = (a, b, n) => Math.abs(a - b) === n || (Math.abs(a - b) === 1 && Math.floor(a / n) === Math.floor(b / n));
+
+// a random path through every square: start from a snake and shuffle it with "backbite" moves
+function hamiltonian(n, rnd){
+  const N = n * n, p = [], pos = new Array(N);
+  for (let y = 0; y < n; y++) for (let k = 0; k < n; k++) p.push(y * n + (y % 2 ? n - 1 - k : k));
+  p.forEach((c, i) => pos[c] = i);
+  for (let it = N * 60; it > 0; it--){
+    if (rnd() < .5){ p.reverse(); p.forEach((c, i) => pos[c] = i); }
+    const ns = nbrs(p[0], n), i = pos[ns[Math.floor(rnd() * ns.length)]];
+    if (i <= 1) continue;
+    for (let a = 0, b = i - 1; a < b; a++, b--){ [p[a], p[b]] = [p[b], p[a]]; pos[p[a]] = a; pos[p[b]] = b; }
+  }
+  return p;
+}
+// cut that path into k pieces; each piece is one color's solution and its two ends are the dots
+function generate(level){
+  const n = sizeFor(level), N = n * n, rnd = mulberry(level * 9973 + 7);
+  for (let tries = 0; ; tries++){
+    const path = hamiltonian(n, rnd);
+    const k = clamp(Math.round(n * (.95 + rnd() * .3)), 4, Math.min(COLORS.length, Math.floor(N / 4)));
+    const len = new Array(k).fill(3), w = len.map(() => .3 + rnd()), tw = w.reduce((a, b) => a + b);
+    for (let left = N - 3 * k; left > 0; left--){ let r = rnd() * tw, j = 0; while ((r -= w[j]) > 0 && j < k - 1) j++; len[j]++; }
+    const segs = []; let at = 0;
+    for (const l of len){ segs.push(path.slice(at, at + l)); at += l; }
+    // dots right next to each other make a pair you can join without thinking
+    if (tries < 400 && segs.some(s => adjacent(s[0], top(s), n))) continue;
+    const order = segs.map((_, i) => i);
+    for (let i = order.length - 1; i > 0; i--){ const j = Math.floor(rnd() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+    const sol = order.map(i => segs[i]), dot = new Array(N).fill(-1);
+    sol.forEach((s, c) => { dot[s[0]] = c; dot[top(s)] = c; });
+    return {level, n, N, k, sol, dot, ends:sol.map(s => [s[0], top(s)])};
+  }
+}
+
+/* ================= STATE ================= */
+const SAVE_KEY = 'lanza-lines-save-v1', PREF_KEY = 'lanza-lines-prefs-v1', STAT_KEY = 'lanza-lines-stats-v1';
+const load = k => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } };
+const store = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+const P = Object.assign({muted:false}, load(PREF_KEY));
+const ST = Object.assign({solved:0, perfect:0, hints:0, maxLevel:1, best:{}}, load(STAT_KEY));  // best: fastest hint-free solve in ms, by board size
+let PZ, S, H = [], owner = [];
+
+const fresh = L => ({level:L, paths:Array.from({length:PZ.k}, () => []), moves:0, last:-1, time:0, started:false, solved:false, hints:0});
+const snap = () => JSON.stringify({paths:S.paths, moves:S.moves, last:S.last});
+const save = () => store(SAVE_KEY, {S, H:H.slice(-100)});
+const saveStats = () => store(STAT_KEY, ST);
+const savePrefs = () => store(PREF_KEY, P);
+const otherEnd = (c, cell) => PZ.ends[c][0] === cell ? PZ.ends[c][1] : PZ.ends[c][0];
+const linked = c => { const p = S.paths[c]; return p.length > 1 && top(p) === otherEnd(c, p[0]); };
+function reown(){
+  owner = new Array(PZ.N).fill(-1);
+  S.paths.forEach((p, c) => p.forEach(cell => owner[cell] = c));
+}
+const piped = () => S.paths.reduce((n, p) => n + (p.length > 1 ? p.length : 0), 0);
+
+/* ================= DRAWING PIPES ================= */
+let drag = null;  // {c, base, path, kb, before, pid}
+// lay the dragged pipe down, then cut any other pipe it runs over (cut pipes grow back if you retreat)
+function apply(){
+  const {c, path, base} = drag, mine = new Set(path);
+  S.paths[c] = path.slice();
+  base.forEach((b, o) => {
+    if (o === c) return;
+    const j = b.findIndex(cell => mine.has(cell));
+    S.paths[o] = j < 0 ? b.slice() : b.slice(0, j);
+  });
+  reown(); render();
+}
+function begin(cell, kb){
+  if (S.solved || drag) return false;
+  let c = PZ.dot[cell], path;
+  if (c >= 0) path = [cell];
+  else {
+    c = owner[cell];
+    if (c < 0) return false;
+    const p = S.paths[c]; path = p.slice(0, p.indexOf(cell) + 1);
+  }
+  drag = {c, path, kb, base:S.paths.map(p => p.slice()), before:snap()};
+  sfx.pick(c); apply();
+  return true;
+}
+function stepTo(cell){
+  const {c, path} = drag, n = PZ.n;
+  if (cell < 0 || cell >= PZ.N || !adjacent(top(path), cell, n)) return false;
+  const i = path.indexOf(cell);
+  if (i >= 0){ path.length = i + 1; apply(); sfx.step(path.length); return true; }
+  if (path.length > 1 && top(path) === otherEnd(c, path[0])) return false;
+  const d = PZ.dot[cell];
+  if (d >= 0 && d !== c){ sfx.nope(); return false; }
+  const cutting = owner[cell] >= 0 && owner[cell] !== c;
+  path.push(cell); apply();
+  if (d === c){ sfx.link(c); ring(cell, c); say(`${COLORS[c].name} linked.`); }
+  else if (cutting) sfx.cut();
+  else sfx.step(path.length);
+  return true;
+}
+// follow the pointer one square at a time, so a fast swipe still lays a continuous pipe
+function moveTo(cell){
+  const path = drag.path, i = path.indexOf(cell), n = PZ.n;
+  if (i >= 0){ if (i < path.length - 1){ path.length = i + 1; apply(); sfx.step(path.length); } return; }
+  for (let guard = 0; top(drag.path) !== cell && guard < 60; guard++){
+    const e = top(drag.path), dx = cell % n - e % n, dy = Math.floor(cell / n) - Math.floor(e / n);
+    const hx = dx ? e + Math.sign(dx) : -1, vy = dy ? e + Math.sign(dy) * n : -1;
+    const [a, b] = Math.abs(dx) >= Math.abs(dy) ? [hx, vy] : [vy, hx];
+    if (!stepTo(a) && !stepTo(b)) break;
+  }
+}
+function finish(){
+  const d = drag; drag = null;
+  const changed = JSON.stringify(JSON.parse(d.before).paths) !== JSON.stringify(S.paths);
+  if (changed){
+    H.push(d.before); if (H.length > 300) H.shift();
+    if (d.c !== S.last) S.moves++;
+    S.last = d.c;
+    commit();
+  } else render();
+}
+function commit(){
+  S.started = true;
+  reown(); check(); render(); save();
+}
+function check(){
+  if (!PZ.ends.every((_, c) => linked(c))) return;
+  if (owner.every(o => o >= 0)) win();
+  else toast('Every pair is linked. Now fill the empty squares.');
+}
+
+/* ================= ACTIONS ================= */
+function undo(){
+  if (S.solved || drag || !H.length) return;
+  Object.assign(S, JSON.parse(H.pop()));
+  sfx.undo(); reown(); render(); save();
+}
+function restart(){
+  if (S.solved || drag || !S.paths.some(p => p.length)) return;
+  H.push(snap());
+  S.paths = S.paths.map(() => []); S.moves = 0; S.last = -1;
+  sfx.clear(); reown(); render(); save();
+}
+// lay down one color's real solution, preferring a pair that isn't linked yet
+function hint(){
+  if (S.solved || drag) return;
+  const same = (a, b) => a.length === b.length && (a.every((v, i) => v === b[i]) || a.every((v, i) => v === b[b.length - 1 - i]));
+  const wrong = PZ.sol.map((_, c) => c).filter(c => !same(S.paths[c], PZ.sol[c]));
+  if (!wrong.length) return;
+  const c = wrong.find(c => !linked(c)) ?? wrong[0], mine = new Set(PZ.sol[c]);
+  H.push(snap());
+  S.paths = S.paths.map((p, o) => {
+    if (o === c) return PZ.sol[c].slice();
+    const j = p.findIndex(cell => mine.has(cell));
+    return j < 0 ? p : p.slice(0, j);
+  });
+  S.last = -1; S.hints++; ST.hints++; saveStats();
+  PZ.ends[c].forEach(e => ring(e, c));
+  sfx.hint(); say(`Hint: ${COLORS[c].name} laid down.`);
+  commit();
+}
+function goLevel(L){
+  L = clamp(L, 1, ST.maxLevel);
+  PZ = generate(L); S = fresh(L); H = []; drag = null;
+  cursor = PZ.ends[0][0]; rings = [];
+  $('#win').hidden = true;
+  layout(); render(); save(); sfx.clear();
+}
+
+/* ================= WIN ================= */
+const fmtTime = ms => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+function win(){
+  S.solved = true;
+  const perfect = !S.hints && S.moves === PZ.k, ms = Math.round(S.time);
+  const key = PZ.n, newBest = !S.hints && (!ST.best[key] || ms < ST.best[key]);
+  ST.solved++; if (perfect) ST.perfect++;
+  ST.maxLevel = Math.max(ST.maxLevel, S.level + 1);
+  if (newBest) ST.best[key] = ms;
+  saveStats();
+  setTimeout(() => {
+    sfx.win(); confetti();
+    const nn = sizeFor(S.level + 1);
+    $('#winLevel').textContent = `Level ${S.level} · ${PZ.n}×${PZ.n}`;
+    $('#winH').textContent = perfect ? 'Perfect!' : 'Solved!';
+    $('#wTime').textContent = fmtTime(S.time);
+    $('#wMoves').textContent = `${S.moves}/${PZ.k}`;
+    $('#wHints').textContent = S.hints;
+    $('#wNext').textContent = `${nn}×${nn}`;
+    const notes = [];
+    if (newBest) notes.push(`<b>New best on ${PZ.n}×${PZ.n}!</b>`);
+    if (!perfect) notes.push(S.hints ? 'Solve one without hints for a perfect.' : `A perfect takes ${PZ.k} moves, one per color.`);
+    if (nn > PZ.n) notes.push('The board gets bigger next level.');
+    $('#wNote').innerHTML = notes.join(' ');
+    $('#win').hidden = false;
+    $('#again').focus({preventScroll:true});
+    render();
+  }, 300);
+}
+function confetti(){
+  if (reduceMotion) return;
+  const cv = $('#confetti'), x = cv.getContext('2d'), scale = 4;
+  cv.hidden = false;
+  cv.width = Math.ceil(innerWidth / scale); cv.height = Math.ceil(innerHeight / scale);
+  const cols = PZ.sol.map((_, c) => COLORS[c].hex);
+  const bits = Array.from({length:110}, () => ({x:Math.random() * cv.width, y:-Math.random() * cv.height * .6, vx:(Math.random() - .5) * 18, vy:10 + Math.random() * 30, c:cols[Math.floor(Math.random() * cols.length)], s:1 + Math.floor(Math.random() * 2), ph:Math.random() * 6}));
+  let last = performance.now(); const t0 = last;
+  const frame = now => {
+    const dt = Math.min(.05, (now - last) / 1000); last = now;
+    x.clearRect(0, 0, cv.width, cv.height);
+    for (const b of bits){
+      b.vy += 30 * dt; b.x += (b.vx + Math.sin(now / 300 + b.ph) * 8) * dt; b.y += b.vy * dt;
+      x.fillStyle = b.c; x.fillRect(Math.round(b.x), Math.round(b.y), b.s, b.s + (Math.sin(now / 120 + b.ph) > 0 ? 1 : 0));
+    }
+    if (now - t0 < 4200) requestAnimationFrame(frame); else { x.clearRect(0, 0, cv.width, cv.height); cv.hidden = true; }
+  };
+  requestAnimationFrame(frame);
+}
+
+/* ================= BOARD ================= */
+// everything is drawn in art pixels: a square is 12 of them plus a 1-pixel grid line, and each art
+// pixel is a whole number of screen pixels, so the board stays crisp at any size
+const board = $('#board'), g = board.getContext('2d');
+const PITCH = 13;
+let U = 1, UNITS = 0, cursor = 0, kbMode = false, rings = [], raf = 0;
+const ox = i => (i % PZ.n) * PITCH + 1, oy = i => Math.floor(i / PZ.n) * PITCH + 1;
+const R = (x, y, w, h) => g.fillRect(x * U, y * U, w * U, h * U);
+
+function layout(){
+  UNITS = PZ.n * PITCH + 1;
+  const stageW = $('#stage').clientWidth, wide = innerWidth > 760;
+  const availW = wide ? stageW - 280 - 28 : stageW;
+  const availH = innerHeight - (board.getBoundingClientRect().top + scrollY) - 24;
+  const css = Math.min(720, wide ? Math.min(availW, Math.max(340, availH)) : availW);
+  const dpr = devicePixelRatio || 1;
+  U = Math.max(1, Math.floor(css * dpr / UNITS));
+  board.width = board.height = UNITS * U;
+  board.style.width = board.style.height = (UNITS * U / dpr) + 'px';
+}
+// a pixel disc (or ring, when inner > 0) centred on a square
+function disc(cx, cy, r, inner = 0){
+  for (let dy = -Math.ceil(r); dy < Math.ceil(r); dy++){
+    const yy = dy + .5, ho = Math.floor(Math.sqrt(Math.max(0, r * r - yy * yy)));
+    if (!ho) continue;
+    const hi = inner > 0 && inner * inner > yy * yy ? Math.floor(Math.sqrt(inner * inner - yy * yy)) : 0;
+    if (!hi) R(cx - ho, cy + dy, ho * 2, 1);
+    else { R(cx - ho, cy + dy, ho - hi, 1); R(cx + hi, cy + dy, ho - hi, 1); }
+  }
+}
+function ring(cell, c){
+  if (reduceMotion) return;
+  rings.push({cell, c, t0:performance.now()});
+  if (!raf) raf = requestAnimationFrame(tick);
+}
+function tick(){ raf = 0; draw(); if (rings.length) raf = requestAnimationFrame(tick); }
+
+function draw(){
+  const {n, N} = PZ;
+  g.imageSmoothingEnabled = false;
+  g.fillStyle = '#0a0f1d'; R(0, 0, UNITS, UNITS);
+  for (let i = 0; i < N; i++){ g.fillStyle = (i % n + Math.floor(i / n)) % 2 ? '#141b31' : '#172039'; R(ox(i), oy(i), 12, 12); }
+  // tint the squares each pipe covers; linked pipes glow a little brighter
+  S.paths.forEach((p, c) => {
+    if (p.length < 2) return;
+    g.globalAlpha = linked(c) ? .3 : .15; g.fillStyle = COLORS[c].hex;
+    p.forEach(cell => R(ox(cell), oy(cell), 12, 12));
+  });
+  g.globalAlpha = 1;
+  // pipes: dark outline, then the color, then a light edge along the top and left
+  for (const pass of [0, 1, 2]) S.paths.forEach((p, c) => {
+    g.fillStyle = pass === 0 ? '#060912' : pass === 1 ? COLORS[c].hex : COLORS[c].hi;
+    for (let j = 0; j < p.length - 1; j++){
+      const ax = ox(p[j]) + 6, ay = oy(p[j]) + 6, bx = ox(p[j+1]) + 6, by = oy(p[j+1]) + 6;
+      const x0 = Math.min(ax, bx), y0 = Math.min(ay, by), w = Math.abs(bx - ax), h = Math.abs(by - ay);
+      if (pass === 0) R(x0 - 3, y0 - 3, w + 6, h + 6);
+      else if (pass === 1) R(x0 - 2, y0 - 2, w + 4, h + 4);
+      else if (h === 0) R(x0 - 2, y0 - 2, w + 4, 1);
+      else R(x0 - 2, y0 - 2, 1, h + 4);
+    }
+  });
+  // the soft circle under your finger while you draw
+  if (drag && !drag.kb){
+    const e = top(drag.path);
+    g.globalAlpha = .2; g.fillStyle = COLORS[drag.c].hex; disc(ox(e) + 6, oy(e) + 6, 17); g.globalAlpha = 1;
+  }
+  PZ.ends.forEach((ends, c) => ends.forEach(e => g.drawImage(DOTSPR[c], (ox(e) + 1) * U, (oy(e) + 1) * U, 10 * U, 10 * U)));
+  const now = performance.now();
+  rings = rings.filter(r => now - r.t0 < 420);
+  for (const r of rings){
+    const t = (now - r.t0) / 420;
+    g.globalAlpha = 1 - t; g.fillStyle = COLORS[r.c].hi;
+    disc(ox(r.cell) + 6, oy(r.cell) + 6, 6 + t * 9, 4.5 + t * 9);
+  }
+  g.globalAlpha = 1;
+  if (kbMode && document.activeElement === board && !S.solved){
+    const x = ox(cursor), y = oy(cursor);
+    g.fillStyle = '#f2c14e';
+    for (let k = 0; k < 12; k += 4){ R(x + k, y, 2, 1); R(x + k + 2, y + 11, 2, 1); R(x, y + k + 2, 1, 2); R(x + 11, y + k, 1, 2); }
+  }
+}
+function render(){ draw(); hud(); }
+function hud(){
+  const linkedN = PZ.ends.filter((_, c) => linked(c)).length;
+  $('#mLevel').textContent = S.level;
+  $('#mFlows').textContent = `${linkedN}/${PZ.k}`;
+  $('#mFill').textContent = Math.round(piped() / PZ.N * 100) + '%';
+  $('#mMoves').innerHTML = `${S.moves}<small>/${PZ.k}</small>`;
+  $('#mTime').textContent = fmtTime(S.time);
+  $('#lvlLabel').textContent = `Level ${S.level} · ${PZ.n}×${PZ.n}`;
+  $('#prev').disabled = S.level <= 1;
+  $('#next').disabled = S.level >= ST.maxLevel;
+  $('#undo').disabled = !H.length || S.solved;
+  $('#restart').disabled = S.solved || !S.paths.some(p => p.length);
+  $('#hint').disabled = S.solved;
+  $('#mute').textContent = P.muted ? 'Sound: off' : 'Sound: on';
+  $('#stSolved').textContent = ST.solved;
+  $('#stPerfect').textContent = ST.perfect;
+  $('#stTop').textContent = ST.maxLevel;
+  $('#stHints').textContent = ST.hints;
+  $('#stBestLabel').textContent = `Best ${PZ.n}×${PZ.n}`;
+  $('#stBest').textContent = ST.best[PZ.n] ? fmtTime(ST.best[PZ.n]) : '-';
+  board.setAttribute('aria-label', `Level ${S.level}, ${PZ.n} by ${PZ.n} grid. ${linkedN} of ${PZ.k} colors linked, ${Math.round(piped() / PZ.N * 100)}% filled. ${cellName(cursor)}`);
+}
+function cellName(i){
+  const d = PZ.dot[i], o = owner[i];
+  const what = d >= 0 ? `${COLORS[d].name} dot` : o >= 0 ? `${COLORS[o].name} pipe` : 'empty';
+  return `Row ${Math.floor(i / PZ.n) + 1}, column ${i % PZ.n + 1}: ${what}.`;
+}
+
+/* ================= INPUT ================= */
+function cellAt(e, clampToBoard){
+  const r = board.getBoundingClientRect(), n = PZ.n;
+  let x = Math.floor(((e.clientX - r.left) / r.width * UNITS - 1) / PITCH), y = Math.floor(((e.clientY - r.top) / r.height * UNITS - 1) / PITCH);
+  if (!clampToBoard && (x < 0 || y < 0 || x >= n || y >= n)) return -1;
+  x = clamp(x, 0, n - 1); y = clamp(y, 0, n - 1);
+  return y * n + x;
+}
+board.addEventListener('pointerdown', e => {
+  if (e.button !== 0 || drag || S.solved) return;
+  kbMode = false;
+  const cell = cellAt(e, false); if (cell < 0) return;
+  e.preventDefault();
+  board.focus({preventScroll:true});
+  if (!begin(cell, false)) return;
+  drag.pid = e.pointerId;
+  try { board.setPointerCapture(e.pointerId); } catch {}
+});
+board.addEventListener('pointermove', e => {
+  if (!drag || drag.kb || e.pointerId !== drag.pid) return;
+  moveTo(cellAt(e, true));
+});
+const up = e => { if (drag && !drag.kb && e.pointerId === drag.pid) finish(); };
+board.addEventListener('pointerup', up);
+board.addEventListener('pointercancel', up);
+board.addEventListener('focus', () => draw());
+board.addEventListener('blur', () => { if (drag?.kb) finish(); draw(); });
+
+const DIRS = {arrowleft:[-1, 0], arrowright:[1, 0], arrowup:[0, -1], arrowdown:[0, 1]};
+board.addEventListener('keydown', e => {
+  const k = e.key.toLowerCase(), n = PZ.n;
+  if (DIRS[k]){
+    e.preventDefault(); kbMode = true;
+    const [dx, dy] = DIRS[k], x = cursor % n + dx, y = Math.floor(cursor / n) + dy;
+    if (x < 0 || y < 0 || x >= n || y >= n) return;
+    const to = y * n + x;
+    if (drag?.kb){ if (stepTo(to)) cursor = to; }
+    else cursor = to;
+    render(); say(cellName(cursor));
+    return;
+  }
+  if (k === 'enter' || k === ' ' || k === 'escape'){
+    e.preventDefault(); kbMode = true;
+    if (drag?.kb){ finish(); say('Dropped.'); }
+    else if (k !== 'escape'){
+      if (begin(cursor, true)) say(`Picked up ${COLORS[drag.c].name}. Use the arrows to lay the pipe, Enter to drop it.`);
+      else { sfx.nope(); say('Nothing to pick up here. Start from a dot or a pipe.'); }
+    }
+    draw();
+  }
+});
+
+document.addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if ((e.metaKey || e.ctrlKey) && k === 'z' && !e.shiftKey){ e.preventDefault(); undo(); return; }
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.target.closest?.('button') && (k === 'enter' || k === ' ')) return;
+  if (k === 'z' || k === 'u') undo();
+  else if (k === 'r') restart();
+  else if (k === 'h') hint();
+  else if (k === 'n' && S.solved) goLevel(S.level + 1);
+});
+
+// leaving a level you've started wants a second press
+function guardedLevel(btn, delta){
+  let armed = 0;
+  btn.addEventListener('click', () => {
+    const busy = S.started && !S.solved && S.paths.some(p => p.length > 1);
+    if (!busy || armed){ clearTimeout(armed); armed = 0; btn.classList.remove('warn'); goLevel(S.level + delta); return; }
+    btn.classList.add('warn'); toast('Press again to leave this level. Your pipes here will be cleared.');
+    armed = setTimeout(() => { armed = 0; btn.classList.remove('warn'); }, 3000);
+  });
+}
+guardedLevel($('#prev'), -1);
+guardedLevel($('#next'), 1);
+$('#again').addEventListener('click', () => goLevel(S.level + 1));
+$('#undo').addEventListener('click', undo);
+$('#restart').addEventListener('click', restart);
+$('#hint').addEventListener('click', hint);
+$('#mute').addEventListener('click', () => { P.muted = !P.muted; savePrefs(); hud(); });
+
+let toastT = 0;
+function toast(msg){
+  const t = $('#toast'); t.textContent = msg; t.hidden = false;
+  clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2600);
+}
+const say = msg => { $('#say').textContent = msg; };
+
+/* ================= CLOCK ================= */
+let lastTick = performance.now(), sinceSave = 0;
+setInterval(() => {
+  const now = performance.now(), dt = now - lastTick; lastTick = now;
+  if (!S.started || S.solved || document.hidden) return;
+  S.time += dt; sinceSave += dt;
+  $('#mTime').textContent = fmtTime(S.time);
+  if (sinceSave > 5000){ sinceSave = 0; save(); }
+}, 250);
+document.addEventListener('visibilitychange', () => { lastTick = performance.now(); if (document.hidden) save(); });
+addEventListener('pagehide', save);
+let rT = 0, lastW = 0;
+const relayout = () => { cancelAnimationFrame(rT); rT = requestAnimationFrame(() => { layout(); draw(); }); };
+new ResizeObserver(() => { const w = $('#stage').clientWidth; if (w !== lastW){ lastW = w; relayout(); } }).observe($('#stage'));
+addEventListener('resize', relayout);
+
+/* ================= START ================= */
+const saved = load(SAVE_KEY);
+const L0 = saved?.S && Number.isInteger(saved.S.level) && saved.S.level >= 1 ? Math.min(saved.S.level, ST.maxLevel) : 1;
+PZ = generate(L0);
+const valid = saved?.S?.level === L0 && Array.isArray(saved.S.paths) && saved.S.paths.length === PZ.k &&
+  saved.S.paths.every((p, c) => Array.isArray(p) && (!p.length || PZ.ends[c].includes(p[0])) && p.every((cell, j) => Number.isInteger(cell) && cell >= 0 && cell < PZ.N && (!j || adjacent(p[j-1], cell, PZ.n))));
+if (valid && !saved.S.solved){
+  S = saved.S; H = Array.isArray(saved.H) ? saved.H : [];
+  cursor = PZ.ends[0][0];
+  reown(); layout(); render();
+} else if (valid && saved.S.solved) goLevel(L0 + 1);
+else goLevel(L0);
+})();
+</script>
+</body>
+</html>
